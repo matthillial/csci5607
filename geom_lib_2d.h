@@ -14,25 +14,25 @@ Point2D move(Point2D p, Dir2D d){
 }
 
 //Compute the displacement vector between points p1 and p2
-//The result is a direction 
+//The result is a direction
 Dir2D displacement(Point2D p1, Point2D p2){
   return p2.normalized() - p1.normalized();
 }
 
 //Compute the distance between points p1 and p2
-//The result is a scalar 
+//The result is a scalar
 float dist(Point2D p1, Point2D p2){
-  return vee(p1.normalized(),p2.normalized).magnitude();
+  return vee(p1.normalized(),p2.normalized()).magnitude();
 }
 
 //Compute the perpendicular distance from the point p the the line l
-//The result is a scalar 
+//The result is a scalar
 float dist(Line2D l, Point2D p){
   return vee(p.normalized(), l.normalized());
 }
 
 //Compute the perpendicular distance from the point p the the line l
-//The result is a scalar 
+//The result is a scalar
 float dist(Point2D p, Line2D l){
   return vee(p.normalized(), l.normalized());
 }
@@ -45,7 +45,7 @@ Point2D intersect(Line2D l1, Line2D l2){
 }
 
 //Compute the line that goes through the points p1 and p2
-//The result is a line 
+//The result is a line
 Line2D join(Point2D p1, Point2D p2){
   return vee(p1,p2);
 }
@@ -76,7 +76,13 @@ float angle(Line2D l1, Line2D l2){
 bool segmentSegmentIntersect(Point2D p1, Point2D p2, Point2D a, Point2D b){
   Line2D l1 = join(p1, p2);
   Line2D l2 = join(a, b);
-  return intersect(l1, l2).w != 0;
+  if ((vee(p1, l2) < 0) == (vee(p2, l2) < 0)) {
+    return false;
+  } else if ((vee(a, l1) < 0) == (vee(b, l1) <  0)) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 //Compute if the point p lies inside the triangle t1,t2,t3
@@ -86,28 +92,28 @@ bool pointInTriangle(Point2D p, Point2D t1, Point2D t2, Point2D t3){
   Line2D l1 = join(t1,t2);
   Line2D l2 = join(t2,t3);
   Line2D l3 = join(t3,t1);
-  bool r1 = vee(p, l1).s > 0;
-  bool r2 = vee(p, l2).s > 0;
-  bool r3 = vee(p, l3).s > 0;
-  return r1 == r2 == r3;
+  bool r1 = vee(p, l1) > 0;
+  bool r2 = vee(p, l2) > 0;
+  bool r3 = vee(p, l3) > 0;
+  return (r1 == r2) and (r2 == r3);
 }
 
 //Compute the area of the triangle t1,t2,t3
 //The result is a scalar
 float areaTriangle(Point2D t1, Point2D t2, Point2D t3){
-  return 0.5 * (join(join(t1.normalized(),t2.normalized()),t3.normalized()));
+  return 0.5 * (vee(vee(t1.normalized(),t2.normalized()),t3.normalized()));
 }
 
-//Compute the distance from the point p to the triangle t1,t2,t3 as defined 
+//Compute the distance from the point p to the triangle t1,t2,t3 as defined
 //by it's distance from the edge closest to p.
 //The result is a scalar
 float pointTriangleEdgeDist(Point2D p, Point2D t1, Point2D t2, Point2D t3){
   Line2D l1 = join(t1,t2);
   Line2D l2 = join(t2,t3);
   Line2D l3 = join(t3,t1);
-  float d1 = dist(l1, p);
-  float d2 = dist(l2, p);
-  float d3 = dist(l3, p);
+  float d1 = std::abs(dist(l1, p));
+  float d2 = std::abs(dist(l2, p));
+  float d3 = std::abs(dist(l3, p));
   if (d1 < d2) {
     if (d1 < d3) {
       return d1;
@@ -137,6 +143,12 @@ float pointTriangleCornerDist(Point2D p, Point2D t1, Point2D t2, Point2D t3){
 //Your code should work for both clockwise and counterclockwise windings
 //The result is a boolean
 bool isConvex_Quad(Point2D p1, Point2D p2, Point2D p3, Point2D p4){
+  //check for self-intersecting
+  bool sect1 = segmentSegmentIntersect(p1, p2, p3, p4);
+  bool sect2 = segmentSegmentIntersect(p1, p4, p2, p3);
+  if (sect1 or sect2) {
+    return false;
+  }
   bool in1 = pointInTriangle(p1, p2, p3, p4);
   bool in2 = pointInTriangle(p2, p1, p3, p4);
   bool in3 = pointInTriangle(p3, p1, p2, p4);
