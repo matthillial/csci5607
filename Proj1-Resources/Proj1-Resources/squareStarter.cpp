@@ -21,7 +21,7 @@ using namespace std;
 
 
 //Name of image texture
-string textureName = "test.ppm";
+string textureName = "goldy.ppm";
 
 //Screen size
 int screen_width = 800;
@@ -36,7 +36,7 @@ float vertices[] = {  //The function updateVertices() changes these values to ma
 //  X     Y     R     G     B     U    V
   0.3f,  0.3f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // top right
   0.3f, -0.3f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
-  -0.3f,  0.3f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // top left 
+  -0.3f,  0.3f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // top left
   -0.3f, -0.3f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,  // bottom left
 };
 
@@ -65,16 +65,82 @@ float clicked_angle, clicked_size;
 
 void mouseClicked(float mx, float my); //Called when mouse is pressed down
 void mouseDragged(float mx, float my); //Called each time the mouse is moved during click
+void updateSquare();
 void updateVertices();
 
 bool do_translate = false;
 bool do_rotate = false;
 bool do_scale = false;
+bool do_animate = true;
+
+Point2D proj = p2;
 
 
 //////////////////////////
 ///  Begin your code here
 /////////////////////////
+
+bool pointInSquare(Point2D p, Point2D t1, Point2D t2, Point2D t3, Point2D t4){
+  Line2D l1 = vee(t1,t2);
+  Line2D l2 = vee(t2,t3);
+  Line2D l3 = vee(t3,t4);
+  Line2D l4 = vee(t4,t1);
+  bool r1 = vee(p, l1) > 0;
+  bool r2 = vee(p, l2) > 0;
+  bool r3 = vee(p, l3) > 0;
+  bool r4 = vee(p, l4) > 0;
+  return (r1 == r2) and (r2 == r3) and (r3 == r4);
+}
+
+float dist(Point2D p1, Point2D p2){
+  return vee(p1,p2).magnitude();
+}
+
+float dist(Point2D p, Line2D l){
+  return std::abs(vee(p, l.normalized()));
+}
+
+float min(float a, float b, float c, float d) {
+  return(std::min(a, std::min(b, std::min(c, d))));
+}
+
+Point2D project(Point2D p, Line2D l){
+  return dot(l,p) * l;
+}
+
+Line2D project(Line2D l, Point2D p){
+  return dot(l,p) * p;
+}
+
+Line2D join(Point2D p1, Point2D p2){
+  return vee(p1,p2);
+}
+
+float angle(Line2D l1, Line2D l2){
+  return std::acos(dot(l1.normalized(), l2.normalized()));
+}
+
+float distToEdge(Point2D mouse, Point2D p1, Point2D p2) {
+  Line2D bisector = (p1 + p2)*(vee(p1, p2));
+  Line2D edge = vee(p1, p2).normalized();
+  Line2D perp1 = project(bisector, p1);
+  Line2D perp2 = project(bisector, p2);
+  bool r1 = vee(mouse, perp1) > 0;
+  bool r2 = vee(mouse, perp2) > 0;
+  if (r1 != r2) { // if mouse lies between endpoints
+    return dist(mouse, edge);
+  } else {
+    return std::min(dist(mouse, p1), dist(mouse, p2));
+  }
+}
+
+bool touchingEdge(Point2D mouse) {
+  float d1 = distToEdge(mouse, p1, p2);
+  float d2 = distToEdge(mouse, p2, p3);
+  float d3 = distToEdge(mouse, p3, p4);
+  float d4 = distToEdge(mouse, p4, p1);
+  return min(d1, d2, d3, d4) < 0.02;
+}
 
 //TODO: Read from ASCII (P3) PPM files
 //Inputs are output variables for returning the image width and heigth
@@ -90,7 +156,7 @@ unsigned char* loadImage(int& img_w, int& img_h){
 
    //Check that this is an ASCII PPM (first line is P3)
    string PPM_style;
-   ppmFile >> PPM_style; //Read the first line of the header    
+   ppmFile >> PPM_style; //Read the first line of the header
    if (PPM_style != "P3") {
       printf("ERROR: PPM Type number is %s. Not an ASCII (P3) PPM file!\n",PPM_style.c_str());
       exit(1);
@@ -108,17 +174,18 @@ unsigned char* loadImage(int& img_w, int& img_h){
       exit(1);
    }
 
-   //TODO: This loop puts in fake data, replace with the actual pixels read from the file
-   //      ... see project description for a hint on how to do this
-   for (int i = 0; i < img_h; i++){
-      float fi = i/(float)img_h;
-      for (int j = 0; j < img_w; j++){
-         float fj = j/(float)img_w;
-         img_data[i*img_w*4 + j*4] = 50;  //Red
-         img_data[i*img_w*4 + j*4 + 1] = fj*150;  //Green
-         img_data[i*img_w*4 + j*4 + 2] = fi*250;  //Blue
-         img_data[i*img_w*4 + j*4 + 3] = 255;  //Alpha
-      }
+   int i = 0;
+   int red, green, blue, alpha;
+   int scale = 2;
+   while(ppmFile >> red >> green >> blue) {
+     int x = i % img_w;
+     int y = std::floor(i/img_w);
+     y = img_h - y - 1;
+     img_data[y*img_w*4+x*4] = std::min(red * 2, 255);
+     img_data[y*img_w*4+x*4 + 1] = std::min(green * 2, 255);
+     img_data[y*img_w*4+x*4 + 2] = std::min(blue * 2, 255);
+     img_data[y*img_w*4+x*4 + 3] = 255;
+     i++;
    }
 
    return img_data;
@@ -127,7 +194,7 @@ unsigned char* loadImage(int& img_w, int& img_h){
 //TODO: Choose between translate, rotate, and scale based on where the user clicked
 // Here, I just assume there is always a translate operation. Fix this to switch between
 // translate, rotate, and scale based on where on the square the user clicks.
-void mouseClicked(float m_x, float m_y){   
+void mouseClicked(float m_x, float m_y){
    printf("Clicked at %f, %f\n",m_x,m_y);
 
    //We may need to know the state of the mouse and the square at the moment the user clicked
@@ -136,79 +203,98 @@ void mouseClicked(float m_x, float m_y){
    clicked_pos = rect_pos;
    clicked_angle = rect_angle;
    clicked_size = rect_scale;
-   
-   do_translate = true;
-   do_rotate = false;
    do_scale = false;
+   do_translate = false;
+   do_rotate = false;
+   do_animate = false;
+
+   if (min(dist(clicked_mouse, p1), dist(clicked_mouse, p2), dist(clicked_mouse, p3), dist(clicked_mouse, p4)) < 0.02) {
+     do_scale = true;
+   }
+   else if (touchingEdge(clicked_mouse)) {
+     do_rotate = true;
+   }
+   else if (pointInSquare(clicked_mouse, p1, p2, p3, p4)) {
+     do_translate = true;
+   }
 
 }
 
 //TODO: Update the position, rotation, or scale based on the mouse movement
 //  I've implemented the logic for position, you need to do scaling and angle
-//TODO: Notice how smooth draging the square is (e.g., there are no "jumps" when you click), 
+//TODO: Notice how smooth draging the square is (e.g., there are no "jumps" when you click),
 //      try to make your implementation of rotate and scale as smooth
 void mouseDragged(float m_x, float m_y){
    Point2D cur_mouse = Point2D(m_x,m_y);
-   
+
+   do_animate = false;
+
    if (do_translate){
       Dir2D disp = cur_mouse-clicked_mouse;
       rect_pos = clicked_pos+disp;
    }
-   
+
    if (do_scale){
-      //Compute the new size, g_size, based on the mouse positions
-      rect_scale = clicked_size; //This is wrong: the scale should grow or shrink based on the mouse movements
+      rect_scale = clicked_size + (dist(cur_mouse, rect_pos) / dist(clicked_mouse, rect_pos) - 1);
    }
-   
+
    if (do_rotate){
       //Compute the new angle, rect_angle, based on the mouse positions
-      rect_angle = clicked_angle; //This is wrong: the angle should change based on the mouse movements
+      Line2D l1 = join(rect_pos, clicked_mouse);
+      Line2D l2 = join(rect_pos, cur_mouse);
+      float a1 = std::atan2(l1.x, l1.y);
+      float a2 = std::atan2(l2.x, l2.y);
+      rect_angle = clicked_angle + a2 - a1; //This is wrong: the angle should change based on the mouse movements
    }
 
    //Assuming the angle (rect_angle), position (rect_pos), and scale (rect_scale) of the rectangle
    //  have all been set above, the following code should rotate, shift and scale the shape correctly.
    //It's still good to read through and make sure you understand how this works!
 
-   Motor2D translate, rotate;
+   updateSquare();
+}
 
-   Dir2D disp = rect_pos-origin;
-   translate = Translator2D(disp);
-   rotate = Rotator2D(rect_angle, rect_pos);
+void updateSquare() {
+  Motor2D translate, rotate;
 
-   Motor2D movement = rotate*translate;
+  Dir2D disp = rect_pos-origin;
+  translate = Translator2D(disp);
+  rotate = Rotator2D(rect_angle, rect_pos);
 
-   //Scale points
-   p1 = init_p1.scale(rect_scale);
-   p2 = init_p2.scale(rect_scale);
-   p3 = init_p3.scale(rect_scale);
-   p4 = init_p4.scale(rect_scale);
+  Motor2D movement = rotate*translate;
 
-   //Use Motor to translate and rotate points
-   p1 = transform(p1,movement);
-   p2 = transform(p2,movement);
-   p3 = transform(p3,movement);
-   p4 = transform(p4,movement);
+  //Scale points
+  p1 = init_p1.scale(rect_scale);
+  p2 = init_p2.scale(rect_scale);
+  p3 = init_p3.scale(rect_scale);
+  p4 = init_p4.scale(rect_scale);
 
-   //Update lines based on new points
-   l1 = vee(p1,p2).normalized();
-   l2 = vee(p2,p3).normalized();
-   l3 = vee(p3,p4).normalized();
-   l4 = vee(p4,p1).normalized();
-   
-   updateVertices();
+  //Use Motor to translate and rotate points
+  p1 = transform(p1,movement);
+  p2 = transform(p2,movement);
+  p3 = transform(p3,movement);
+  p4 = transform(p4,movement);
+
+  //Update lines based on new points
+  l1 = vee(p1,p2).normalized();
+  l2 = vee(p2,p3).normalized();
+  l3 = vee(p3,p4).normalized();
+  l4 = vee(p4,p1).normalized();
+
+  updateVertices();
 }
 
 //You shouldn't have to edit this, it updates the displayed verticies to match the computed p1, p2, p3, p4
-void updateVertices(){ 
+void updateVertices(){
    vertices[0] = p3.x;  //Top right x
    vertices[1] = p3.y;  //Top right y
-   
+
    vertices[7] = p2.x;  //Bottom right x
    vertices[8] = p2.y;  //Bottom right y
-   
+
    vertices[14] = p4.x;  //Top left x
    vertices[15] = p4.y;  //Top left y
-   
+
    vertices[21] =  p1.x;  //Bottom left x
    vertices[22] =  p1.y;  //Bottom left y
 }
@@ -216,7 +302,11 @@ void updateVertices(){
 //TODO: Resest the square's position, orientation, and scale
 void r_keyPressed(){
    cout << "The 'r' key was pressed" <<endl;
-   //You should reset the 4 points of the rectangle, and update the coresponding verticies
+   p1 = init_p1, p2 = init_p2, p3 = init_p3, p4 = init_p4;
+   rect_scale = 1.0;
+   rect_angle = 0.0;
+   rect_pos = Point2D(0,0);
+   updateVertices();
 }
 
 /////////////////////////////
@@ -239,7 +329,7 @@ const GLchar* vertexSource =
    "   gl_Position = vec4(position, 0.0, 1.0);"
    "   texcoord = inTexcoord;"
    "}";
-    
+
 const GLchar* fragmentSource =
    "#version 150 core\n"
    "uniform sampler2D tex0;"
@@ -248,23 +338,23 @@ const GLchar* fragmentSource =
    "void main() {"
    "   outColor = texture(tex0, texcoord).rgb;"
    "}";
-    
+
 bool fullscreen = false;
 
 float mouse_dragging = false;
 int main(int argc, char *argv[]){
 
    SDL_Init(SDL_INIT_VIDEO);  //Initialize Graphics (for OpenGL)
-   
+
    //Ask SDL to get a fairly recent version of OpenGL (3.2 or greater)
    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
-	
+
 	//Create a window (offsetx, offsety, width, height, flags)
 	SDL_Window* window = SDL_CreateWindow("My OpenGL Program", 100, 100, screen_width, screen_height, SDL_WINDOW_OPENGL);
    //TODO: TEST your understanding: Try changing the title of the window to something more personalized.
-	
+
 	//The above window cannot be resized which makes some code slightly easier.
 	//Below show how to make a full screen window or allow resizing
 	//SDL_Window* window = SDL_CreateWindow("My OpenGL Program", 0, 0, screen_width, screen_height, SDL_WINDOW_FULLSCREEN|SDL_WINDOW_OPENGL);
@@ -272,12 +362,12 @@ int main(int argc, char *argv[]){
 	//SDL_Window* window = SDL_CreateWindow("My OpenGL Program",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,0,0,SDL_WINDOW_FULLSCREEN_DESKTOP|SDL_WINDOW_OPENGL); //Boarderless window "fake" full screen
 
    float aspect = screen_width/(float)screen_height; //aspect ratio (needs to be updated if the window is resized)
-	
+
 	updateVertices(); //set initial position of the square to match it's state
-	
+
 	//Create a context to draw in
 	SDL_GLContext context = SDL_GL_CreateContext(window);
-	
+
 	//OpenGL functions using glad library
    if (gladLoadGLLoader(SDL_GL_GetProcAddress)){
       printf("OpenGL loaded\n");
@@ -331,11 +421,11 @@ int main(int argc, char *argv[]){
 
 
    //Load the vertex Shader
-   GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER); 
+   GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
    glShaderSource(vertexShader, 1, &vertexSource, NULL);
    glCompileShader(vertexShader);
 
-   //Let's double check the shader compiled 
+   //Let's double check the shader compiled
    GLint status;
    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &status);
    if (!status){
@@ -348,7 +438,7 @@ int main(int argc, char *argv[]){
    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
    glCompileShader(fragmentShader);
 
-   //Double check the shader compiled 
+   //Double check the shader compiled
    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &status);
    if (!status){
       char buffer[512];
@@ -366,12 +456,12 @@ int main(int argc, char *argv[]){
    glUseProgram(shaderProgram); //Set the active shader (only one can be used at a time)
 
 
-   //Tell OpenGL how to set fragment shader input 
+   //Tell OpenGL how to set fragment shader input
 
    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
    //               Attribute, vals/attrib., type, normalized?, stride, offset
    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 7*sizeof(float), 0);
-   glEnableVertexAttribArray(posAttrib); //Binds the VBO current GL_ARRAY_BUFFER 
+   glEnableVertexAttribArray(posAttrib); //Binds the VBO current GL_ARRAY_BUFFER
 
    GLint colAttrib = glGetAttribLocation(shaderProgram, "inColor");
    glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)(2*sizeof(float)));
@@ -380,47 +470,94 @@ int main(int argc, char *argv[]){
    GLint texAttrib = glGetAttribLocation(shaderProgram, "inTexcoord");
    glEnableVertexAttribArray(texAttrib);
    glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, 7*sizeof(float), (void*)(5*sizeof(float)));
-      
+
 
    //Event Loop (Loop forever processing each event as fast as possible)
    SDL_Event windowEvent;
    bool done = false;
+
+   float dx = 0.0;
+   float dy = 0.0;
+   float dr = 0.0;
+   float ds = 0.0;
+
    while (!done){
+
       while (SDL_PollEvent(&windowEvent)){  //Process input events (e.g., mouse & keyboard)
          if (windowEvent.type == SDL_QUIT) done = true;
          //List of keycodes: https://wiki.libsdl.org/SDL_Keycode - You can catch many special keys
          //Scancode referes to a keyboard position, keycode referes to the letter (e.g., EU keyboards)
-         if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_ESCAPE) 
+         if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_ESCAPE)
             done = true; //Exit event loop
          if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_f) //If "f" is pressed
             fullscreen = !fullscreen;
          if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_r) //If "r" is pressed
             r_keyPressed();
-         SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN : 0); //Set to full screen 
+         if (windowEvent.type == SDL_KEYUP && windowEvent.key.keysym.sym == SDLK_a)
+            do_animate = !do_animate;
+         SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN : 0); //Set to full screen
       }
-      
-      
+
+
       int mx, my;
+      //do_animate = true;
       if (SDL_GetMouseState(&mx, &my) & SDL_BUTTON(SDL_BUTTON_LEFT)) { //Is the mouse down?
          if (mouse_dragging == false){
             mouseClicked(2*mx/(float)screen_width - 1, 1-2*my/(float)screen_height);
-         } 
+         }
          else{
             mouseDragged(2*mx/(float)screen_width-1, 1-2*my/(float)screen_height);
          }
          mouse_dragging = true;
-      } 
+      }
       else{
          mouse_dragging = false;
       }
-      
+
+      if(do_animate) {
+        // change position
+        float d = 0.0005;
+        float edge = 0.8;
+        float lo = -d + dx;
+        float hi = d + dx;
+        dx = lo + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(hi-lo)));
+        if (rect_pos.x + dx > edge || rect_pos.x + dx < -edge) {
+          dx = -dx/5;
+        }
+        lo = -d + dy;
+        hi = d + dy;
+        dy = lo + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(hi-lo)));
+        if (rect_pos.y + dy > edge || rect_pos.y + dy < -edge) {
+          dy = -dy/5;
+        }
+        Dir2D disp = Dir2D(dx, dy);
+        rect_pos = rect_pos + disp;
+
+        // change rotation
+        lo = std::max(-0.001 + dr, -0.01);
+        hi = std::min(0.001 + dr, 0.01);
+        dr = lo + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(hi-lo)));
+        rect_angle += dr;
+
+        // change scale
+        lo = std::max(-0.001 + ds, -0.01);
+        hi = std::min(0.001 + ds, 0.01);
+        ds = lo + static_cast <float> (rand()) /( static_cast <float> (RAND_MAX/(hi-lo)));
+        if (rect_scale + ds > 3.0 || rect_scale + ds < 0.5) {
+          ds = -ds;
+        }
+        rect_scale += ds;
+
+        updateSquare();
+      }
+
       glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW); //upload vertices to vbo
 
-      
+
       // Clear the screen to grey
       glClearColor(0.6f, 0.6, 0.6f, 0.0f);
       glClear(GL_COLOR_BUFFER_BIT);
-               
+
       glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); //Draw the two triangles (4 vertices) making up the square
       //TODO: TEST your understanding: What shape do you expect to see if you change the above 4 to 3?  Guess, then try it!
 
